@@ -5,15 +5,14 @@ Created on Sun Nov 19 18:33:49 2023
 @author: Jaime Bonache < http://www.github.com/ivor4/pickle_skip > < jaime.bonache.iv4@gmail.com >
 """
 
-import cloudpickle
+import numpy as np
 
-class ContainerObject:
-    pass
 
 class PickleSkipper:
-    def __init__(self, target: object, max_recurs: int = 64)->None:
+    def __init__(self, target: object, max_recurs: int = 64, verbose:bool = True)->None:
         self.target = target
         self.max_recurs = max_recurs
+        self.verbose = verbose
         
     @classmethod
     def _get_value_dict(cls, target:object, prop:str)->object:
@@ -21,83 +20,96 @@ class PickleSkipper:
     
     @classmethod
     def _get_value_inst(cls, target:object, prop:str)->object:
-        return getattr(target, prop)
+        return target.__dict__[prop]
     
     def GetGetterFunction(self, target)->(callable,enumerate):
-        getfunc = None
+        getFunc = None
         getEnumerate = None
         isInstance = False
         isDict = False
         
         try:
-            getEnumerate = target.keys()
-            getfunc = PickleSkipper._get_value_dict
-            isDict = True
-        except Exception:
+            if(isInstance(target,dict)):
+                getEnumerate = target.keys()
+                getFunc = PickleSkipper._get_value_dict
+                isDict = True
+        except:
             pass
-        
-        if(not isDict):
-            try:
-                getEnumerate = vars(target).keys()
-                getfunc = PickleSkipper._get_value_inst
-                isInstance = True
-            except Exception:
-                pass
+
+
+        try:
+            getEnumerate = target.__dict__.keys()
+            getFunc = PickleSkipper._get_value_inst
+            isInstance = True
+        except:
+            pass
         
         if(not isInstance and not isDict):
             #Treated as a final value
             pass
             
-        return getfunc,getEnumerate
+        return getFunc,getEnumerate
     
     
     
-    def _recursive_trial_and_error(self, target:object, n_iter:int)->ContainerObject:
-        retVal = ContainerObject()
-        print(n_iter)
-        print(target)
-        
+    def _recursive_trial_and_error(self, target:object, concat_attr:str, n_iter:int)->object:
         if(n_iter >= self.max_recurs):
-            setattr(retVal, 'value', 'PICKLE-SKIP-RECURS-MAX')
+            #setattr(retVal, 'value', 'PICKLE-SKIP-RECURS-MAX')
+            retVal = 'PICKLE-SKIP-RECURS-MAX'
         else:
             getfunc, getEnumerate = self.GetGetterFunction(target)
+
             
             #If object has attributes, it will need to be iterated again
             if(getfunc != None):
+                retVal = {}
                 for next_prop in getEnumerate:
-                    print(next_prop)
-                    next_target = getfunc(target, next_prop)
+                    if(not isinstance(next_prop, str)):
+                        if(self.verbose):
+                            print('Cannot understand property: '+concat_attr+'.'+str(next_prop))
+                        continue
+                    elif(next_prop.startswith('__')):
+                        #Avoid inner attributes as they may loop into themselves
+                        retVal[next_prop] = str(target)
+                        continue
                     
-                    fail = False
                     try:
-                        _ = cloudpickle.dumps(next_target, protocol = cloudpickle.DEFAULT_PROTOCOL)
+                        next_target = getfunc(target, next_prop)
                     except:
-                        fail = True
+                        if(self.verbose):
+                            print('Error reading attr: '+concat_attr+'.'+next_prop)
+                        retVal[next_prop] = str(target)
+                        continue
                     
-                    if(fail):
-                        innerRetVal = self._recursive_trial_and_error(next_target, n_iter+1)
-                        setattr(retVal, next_prop, innerRetVal)
-                    else:
-                        setattr(retVal, next_prop, next_target)
+ 
+                    innerRetVal = self._recursive_trial_and_error(next_target,concat_attr+'.'+next_prop, n_iter+1)
+                    retVal[next_prop] = innerRetVal
+
                         
-            #If value has no attributes, then is a final value, if it is observable by pickle, go on, otherwise give err value
+            #If value has no attributes, then is a final value, if it is known type, get directly, otehrwise, string
             else:
-                fail = False
-                try:
-                    _ = cloudpickle.dumps(target, protocol = cloudpickle.DEFAULT_PROTOCOL)
-                except:
-                    fail = True
-                
-                if(fail):
-                    retVal = 'PICKLE-SKIP-VALUE-UNREADABLE'
-                else:
+                if(isinstance(target, list) or (isinstance(target, tuple))):
+                    retVal = []
+                    for i in range(len(target)):
+                        retVal.append(self._recursive_trial_and_error(target[i],concat_attr, n_iter+1))
+                elif(isinstance(target, np.ndarray)):
                     retVal = target
+                elif(isinstance(target, bool)):
+                    retVal = target
+                elif(isinstance(target, int)):
+                    retVal = target
+                elif(isinstance(target, float)):
+                    retVal = target
+                elif(target is None):
+                    retVal = target
+                else:
+                    retVal = str(target)
         return retVal
             
         
     
-    def Update(self)->ContainerObject:
+    def Update(self)->dict:
         #Start from iteration 0
-        retVal = self._recursive_trial_and_error(self.target, 0) 
+        retVal = self._recursive_trial_and_error(self.target, '',0) 
         return retVal
 

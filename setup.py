@@ -17,9 +17,10 @@ setup(
     author='Jaime Bonache',
     author_email='jaime.bonache.iv4@gmail.com',
     description='A short workaround to observe full content of attributes with Variable Explorer from Spyder avoinding Pickle erorrs for some types. If you use this library, please give Like at github :)',
+    package_data={"pickle_skip": ["version.txt"]},
     packages=find_packages(),
     install_requires=[
-        "cloudpickle"
+        "numpy"
     ],
     classifiers=[
         'Programming Language :: Python :: 3',
