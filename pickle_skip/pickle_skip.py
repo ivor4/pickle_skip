@@ -81,7 +81,10 @@ class PickleSkipper:
                         retVal[next_prop] = str(target)
                         continue
                     
- 
+                    if(next_target is self):
+                        #Avoid self, if it was included in target object, this would lead into an endless loop
+                        #until max_recurs
+                        continue
                     innerRetVal = self._recursive_trial_and_error(next_target,concat_attr+'.'+next_prop, n_iter+1)
                     retVal[next_prop] = innerRetVal
 
