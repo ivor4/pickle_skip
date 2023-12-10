@@ -9,10 +9,12 @@ import numpy as np
 
 
 class PickleSkipper:
-    def __init__(self, target: object, max_recurs: int = 64, verbose:bool = True)->None:
+    def __init__(self, target: object, max_recurs: int = 64, verbose:bool = True, trace:bool = False, max_array_size: int = 64)->None:
         self.target = target
         self.max_recurs = max_recurs
         self.verbose = verbose
+        self.trace = trace
+        self.max_array_size = max_array_size
         
     @classmethod
     def _get_value_dict(cls, target:object, prop:str)->object:
@@ -29,7 +31,7 @@ class PickleSkipper:
         isDict = False
         
         try:
-            if(isInstance(target,dict)):
+            if(isinstance(target,dict)):
                 getEnumerate = target.keys()
                 getFunc = PickleSkipper._get_value_dict
                 isDict = True
@@ -53,6 +55,9 @@ class PickleSkipper:
     
     
     def _recursive_trial_and_error(self, target:object, concat_attr:str, n_iter:int)->object:
+        if(self.trace):
+            print(concat_attr)
+            
         if(n_iter >= self.max_recurs):
             #setattr(retVal, 'value', 'PICKLE-SKIP-RECURS-MAX')
             retVal = 'PICKLE-SKIP-RECURS-MAX'
@@ -92,11 +97,23 @@ class PickleSkipper:
             #If value has no attributes, then is a final value, if it is known type, get directly, otehrwise, string
             else:
                 if(isinstance(target, list) or (isinstance(target, tuple))):
-                    retVal = []
-                    for i in range(len(target)):
-                        retVal.append(self._recursive_trial_and_error(target[i],concat_attr, n_iter+1))
+                    if(len(target) <= self.max_array_size):
+                        retVal = []
+                        for i in range(len(target)):
+                            retVal.append(self._recursive_trial_and_error(target[i],concat_attr+'['+str(i)+']', n_iter+1))
+                    else:
+                        retVal = str(target)
                 elif(isinstance(target, np.ndarray)):
-                    retVal = target
+                    excess_array = False
+                    shape = target.shape
+                    for i in shape:
+                        if(i > self.max_array_size):
+                            excess_array = True
+                            break
+                    if(excess_array):
+                        retVal = str(target)
+                    else:
+                        retVal = target
                 elif(isinstance(target, bool)):
                     retVal = target
                 elif(isinstance(target, int)):
